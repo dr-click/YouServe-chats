@@ -1,0 +1,16 @@
+
+
+Started GET "/" for 127.0.0.1 at 2016-07-06 17:13:40 +0200
+Processing by PagesController#show as HTML
+  Parameters: {"id"=>:home}
+  Rendered pages/home.html.erb within layouts/application (0.3ms)
+Completed 200 OK in 148ms (Views: 146.6ms | ActiveRecord: 0.0ms)
+
+
+Started GET "/assets/application.self-8b727b76638c4931250e8983c995f38f69e1d4db7869f316a05f586505a528c9.css?body=1" for 127.0.0.1 at 2016-07-06 17:13:40 +0200
+
+
+Started GET "/assets/application.self-48d7d8c89eb8fd7954a2865c0e587f99ea1a1691533af2b5a15dbdfc16c805e9.js?body=1" for 127.0.0.1 at 2016-07-06 17:13:40 +0200
+
+
+Started GET "/assets/profile_placeholder.png" for 127.0.0.1 at 2016-07-06 17:13:40 +0200
