@@ -69,7 +69,7 @@ FriendlyChat.prototype.listenToMessages = function() {
   this.messagesParentRef.off();
   var setParentMessage = function(data) {
     var val = data.val();
-    if(!$("div#"+val.sender_uid).hasClass("selected")){
+    if(!$("div#"+val.sender_uid).hasClass("selected") && val.receiver_uid == this.auth.currentUser.uid){
       $("div#"+val.sender_uid).find("a").click();
     }
   }.bind(this);
@@ -134,7 +134,8 @@ FriendlyChat.prototype.saveMessage = function(e) {
         console.error('Error writing new message to Firebase Database', error);
       });
       this.messagesParentRef.push({
-        sender_uid: this.auth.currentUser.uid
+        sender_uid: this.auth.currentUser.uid,
+        receiver_uid: $(".user-card.selected:first").attr("id")
       });
     }else{
       var data = {
