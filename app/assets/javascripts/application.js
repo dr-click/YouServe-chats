@@ -20,6 +20,7 @@
 
 function FriendlyChat() {
   this.messageList = document.getElementById('messages');
+  this.userList = document.getElementById('users-card-container');
   this.messageForm = document.getElementById('message-form');
   this.messageInput = document.getElementById('message');
   this.submitButton = document.getElementById('submit');
@@ -52,30 +53,143 @@ FriendlyChat.prototype.initFirebase = function() {
   this.auth.onAuthStateChanged(this.onAuthStateChanged.bind(this));
 };
 
-FriendlyChat.prototype.loadMessages = function() {
-  this.messagesRef = this.database.ref('messages');
-  this.messagesRef.off();
-  var setMessage = function(data) {
+FriendlyChat.prototype.messagesRefTxt = function() {
+  var usersInChatIds = []
+  if($(".user-card.selected").length > 0){
+    usersInChatIds.push(this.auth.currentUser.uid);
+    usersInChatIds.push($(".user-card.selected:first").attr("id"));
+    return usersInChatIds.sort().join("-");
+  }else{
+    return ""
+  }
+};
+
+FriendlyChat.prototype.listenToMessages = function() {
+  this.messagesParentRef = this.database.ref('messages');
+  this.messagesParentRef.off();
+  var setParentMessage = function(data) {
     var val = data.val();
-    this.displayMessage(data.key, val.name, val.text, val.photoUrl, val.imageUrl);
+    if(!$("div#"+val.sender_uid).hasClass("selected")){
+      $("div#"+val.sender_uid).find("a").click();
+    }
   }.bind(this);
-  this.messagesRef.limitToLast(12).on('child_added', setMessage);
-  this.messagesRef.limitToLast(12).on('child_changed', setMessage);
+  this.messagesParentRef.limitToLast(1).on('child_added', setParentMessage);
+  this.messagesParentRef.limitToLast(1).on('child_changed', setParentMessage);
+};
+
+FriendlyChat.prototype.loadMessages = function() {
+  var messagesRefTxtToConnect = this.messagesRefTxt();
+  if(messagesRefTxtToConnect.length > 0){
+    this.messagesRef = this.database.ref('messages-'+messagesRefTxtToConnect);
+    this.messagesRef.off();
+    var setMessage = function(data) {
+      var val = data.val();
+      this.displayMessage(data.key, val.name, val.text, val.photoUrl, val.imageUrl);
+    }.bind(this);
+    this.messagesRef.limitToLast(12).on('child_added', setMessage);
+    this.messagesRef.limitToLast(12).on('child_changed', setMessage);
+  }else{
+    var data = {
+      message: 'Select online user first to start a chat.',
+      timeout: 4000
+    };
+    this.signInSnackbar.MaterialSnackbar.showSnackbar(data);
+  }
+};
+
+FriendlyChat.prototype.loadUsers = function() {
+  this.usersRef = this.database.ref('users');
+  this.usersRef.off();
+
+  var setUser = function(data) {
+    var val = data.val();
+    if(val.uid != this.auth.currentUser.uid ){
+      this.displayUser(val.uid, val.name, val.photoUrl);
+    }
+  }.bind(this);
+
+  var unsetUser = function(data) {
+    var val = data.val();
+    $("#" + val.uid).remove();
+  }.bind(this);
+
+  this.usersRef.on('child_added', setUser);
+  this.usersRef.on('child_changed', setUser);
+  this.usersRef.on('child_removed', unsetUser);
 };
 
 FriendlyChat.prototype.saveMessage = function(e) {
   e.preventDefault();
   if (this.messageInput.value && this.checkSignedInWithMessage()) {
-    var currentUser = this.auth.currentUser;
-    this.messagesRef.push({
+    if(this.messagesRef){
+      var currentUser = this.auth.currentUser;
+      this.messagesRef.push({
+        name: currentUser.displayName,
+        text: this.messageInput.value,
+        photoUrl: currentUser.photoURL || '/assets/profile_placeholder.png'
+      }).then(function() {
+        FriendlyChat.resetMaterialTextfield(this.messageInput);
+        this.toggleButton();
+      }.bind(this)).catch(function(error) {
+        console.error('Error writing new message to Firebase Database', error);
+      });
+      this.messagesParentRef.push({
+        sender_uid: this.auth.currentUser.uid
+      });
+    }else{
+      var data = {
+        message: 'Select online user first to start a chat.',
+        timeout: 4000
+      };
+      this.signInSnackbar.MaterialSnackbar.showSnackbar(data);
+    }
+  }
+};
+
+FriendlyChat.prototype.saveUserLogin = function() {
+  var currentUser = this.auth.currentUser;
+  var userAddedBefore = false;
+  var saveUserToFirebase = function() {
+    this.usersRef.push({
       name: currentUser.displayName,
-      text: this.messageInput.value,
+      uid: currentUser.uid,
       photoUrl: currentUser.photoURL || '/assets/profile_placeholder.png'
     }).then(function() {
-      FriendlyChat.resetMaterialTextfield(this.messageInput);
-      this.toggleButton();
     }.bind(this)).catch(function(error) {
-      console.error('Error writing new message to Firebase Database', error);
+      console.error('Error writing user to Firebase Database', error);
+    });
+  }.bind(this);
+
+  this.usersRef.once("value", function(snapshot) {
+    snapshot.forEach(function(data) {
+      var val = data.val();
+      if(val.uid == currentUser.uid){
+        userAddedBefore = true;
+      }
+    });
+    if(!userAddedBefore){
+      saveUserToFirebase();
+    }
+  });
+};
+
+FriendlyChat.prototype.saveUserLogout = function() {
+  var currentUser = this.auth.currentUser;
+  var saveUserSignoutToFirebase = function(key) {
+    var signoutUsersRef = this.database.ref('users/'+key);
+    signoutUsersRef.remove();
+    this.auth.signOut();
+    $("#users-card-container").html("");
+  }.bind(this);
+
+  if(this.usersRef){
+    this.usersRef.once("value", function(snapshot) {
+      snapshot.forEach(function(data) {
+        var val = data.val();
+        if(val.uid == currentUser.uid){
+          saveUserSignoutToFirebase(data.key);
+        }
+      });
     });
   }
 };
@@ -131,7 +245,7 @@ FriendlyChat.prototype.signIn = function() {
 };
 
 FriendlyChat.prototype.signOut = function() {
-  this.auth.signOut();
+  this.saveUserLogout();
 };
 
 FriendlyChat.prototype.onAuthStateChanged = function(user) {
@@ -146,11 +260,15 @@ FriendlyChat.prototype.onAuthStateChanged = function(user) {
     this.signInButton.setAttribute('hidden', 'true');
 
     this.loadMessages();
+    this.listenToMessages();
+    this.loadUsers();
+    this.saveUserLogin();
   } else {
     this.userName.setAttribute('hidden', 'true');
     this.userPic.setAttribute('hidden', 'true');
     this.signOutButton.setAttribute('hidden', 'true');
     this.signInButton.removeAttribute('hidden');
+
   }
 };
 
@@ -179,7 +297,34 @@ FriendlyChat.MESSAGE_TEMPLATE =
       '<div class="name"></div>' +
     '</div>';
 
+FriendlyChat.USER_TEMPLATE =
+  '<div class="user-card"><a class="user-card-link" href="#">'+
+  '<div class="message-container visible">'+
+  '<div class="spacing"><div class="pic"></div></div>'+
+  '<div class="username"></div>'+
+  '</div></a></div>';
+
 FriendlyChat.LOADING_IMAGE_URL = 'https://www.google.com/images/spin-32.gif';
+
+FriendlyChat.prototype.displayUser = function(uid, name, picUrl) {
+  var div = document.getElementById(uid);
+  if (!div) {
+    var container = document.createElement('div');
+    container.innerHTML = FriendlyChat.USER_TEMPLATE;
+    div = container.firstChild;
+    div.setAttribute('id', uid);
+    this.userList.appendChild(div);
+  }
+
+  if (picUrl) {
+    div.querySelector('.pic').style.backgroundImage = 'url(' + picUrl + ')';
+  }
+
+  div.querySelector('.username').textContent = name;
+  setTimeout(function() {div.classList.add('visible')}, 1);
+  this.userList.scrollTop = this.userList.scrollHeight;
+  this.userList.focus();
+};
 
 FriendlyChat.prototype.displayMessage = function(key, name, text, picUrl, imageUri) {
   var div = document.getElementById(key);
@@ -219,6 +364,14 @@ FriendlyChat.prototype.toggleButton = function() {
     this.submitButton.setAttribute('disabled', 'true');
   }
 };
+
+$(document).on("click", "#users-card-container a", function(){
+  $("#users-card-container .user-card").removeClass("selected");
+  $(this).closest(".user-card").addClass("selected");
+  $("#messages").html("");
+  window.friendlyChat.loadMessages();
+  return false;
+});
 
 window.onload = function() {
   window.friendlyChat = new FriendlyChat();

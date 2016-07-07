@@ -13,8 +13,26 @@
  *= require_tree .
  *= require_self
  */
+ #users-card-container {
+   width: 28%;
+   float: right;
+   border: 2px solid black;
+   padding: 10px;
+   height: 100vh;
+   padding-bottom: 0;
+ }
+
+ #users-card-container .message-container {
+   padding: 5px;
+ }
+
+ #users-card-container .user-card.selected {
+   background-color: lightgrey; 
+ }
 
  #messages-card-container {
+   width: 70%;
+   float: left;
    height: calc(100% - 150px);
    padding-bottom: 0;
  }
